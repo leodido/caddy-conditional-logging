@@ -1,0 +1,8 @@
+localhost:2015
+
+file_server browse
+
+log {
+    output stdout
+    level WARN
+}
