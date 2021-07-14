@@ -3,6 +3,8 @@ localhost:2015
 file_server browse
 
 log {
-    output stdout
-    level WARN
+  output stdout
+  format conditional {
+      status sw 4
+  } json
 }
