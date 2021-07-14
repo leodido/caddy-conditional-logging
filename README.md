@@ -68,6 +68,8 @@ From the root directoy of this project, run:
 xcaddy run
 ```
 
+Then open <https://localhost:2015>, go on existing and non-existing pages, and observe the access logs.
+
 ---
 
 [![Analytics](https://ga-beacon.appspot.com/UA-49657176-1/caddy-conditional-logging?flat)](https://github.com/igrigorik/ga-beacon)
