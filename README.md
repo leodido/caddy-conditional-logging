@@ -2,15 +2,15 @@
 
 > Hey Caddy, log only if ...
 
-This plugin implements a logging encoder that let's you log depending on conditions.
+This plugin implements a logging encoder that let's you **log depending on conditions**.
 
 Conditions can be express through a simple expression language.
 
 ## Module
 
-The module name is `if`.
+The **module name** is `if`.
 
-Its syntax is:
+Its **syntax** is:
 
 ```caddyfile
 if {
@@ -20,6 +20,15 @@ if {
 ```
 
 This Caddy module will wrap the `<other encoder>` (eg. `json`, or `console`) and log if at least one of the conditions is met.
+
+Notice the module accepts also nested fields.
+The **field syntax** is as per [buger/jsonparser](https://github.com/buger/jsonparser).
+
+Let's say you want to log if the user agent starts starts with some value...
+
+You'd need to traverse the request object, its headers child (another object), and its "User-Agent" child (array).
+
+Sounds difficult. It isn't! Express this field as: `request>headers>User-Agent>[0]`.
 
 ## Caddyfile
 
@@ -34,14 +43,14 @@ log {
 }
 ```
 
-Log depending on the enviroments (console?) to stdout if the request's method is "GET".
+Log to stdout in console format if the request's method is "GET".
 
 ```caddyfile
 log {
   output stdout
   format if {
       request>method eq GET
-  }
+  } console
 }
 ```
 
@@ -60,6 +69,17 @@ log {
 }
 ```
 
+Log JSON to stdout if the visit is from a Mozilla browser.
+
+```caddyfile
+log {
+  output stdout
+  format if {
+      request>headers>User-Agent>[0] sw Mozilla
+  } json
+}
+```
+
 ## Try it out
 
 From the root directoy of this project, run:
@@ -69,6 +89,20 @@ xcaddy run
 ```
 
 Then open <https://localhost:2015>, go on existing and non-existing pages, and observe the access logs.
+
+To install xcaddy in case you need to, run:
+
+```console
+go get -u github.com/caddyserver/xcaddy/cmd/xcaddy
+```
+
+## Build
+
+To build [Caddy](https://github.com/caddyserver/caddy) with this module in, execute:
+
+```console
+xcaddy build --with github.com/leodido/caddy-conditional-logging
+```
 
 ---
 
