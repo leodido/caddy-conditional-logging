@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	moduleName = "conditional"
+	moduleName = "if"
 	moduleID   = "caddy.logging.encoders." + moduleName
 )
 

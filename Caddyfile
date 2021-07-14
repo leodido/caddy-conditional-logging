@@ -4,7 +4,7 @@ file_server browse
 
 log {
   output stdout
-  format conditional {
+  format if {
       status sw 4
   } json
 }
