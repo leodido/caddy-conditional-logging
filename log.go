@@ -205,5 +205,7 @@ func newDefaultProductionLogEncoder(colorize bool) zapcore.Encoder {
 
 // Interface guards
 var (
-	_ zapcore.Encoder = (*ConditionalEncoder)(nil)
+	_ zapcore.Encoder       = (*ConditionalEncoder)(nil)
+	_ caddy.Provisioner     = (*ConditionalEncoder)(nil)
+	_ caddyfile.Unmarshaler = (*ConditionalEncoder)(nil)
 )
