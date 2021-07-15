@@ -1,6 +1,7 @@
 package conditionallog
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -29,33 +30,53 @@ func init() {
 type ConditionalEncoder struct {
 	zapcore.Encoder `json:"-"`
 
-	EncRaw json.RawMessage `json:"encoder,omitempty" caddy:"namespace=caddy.logging.encoders inline_key=format"`
-	Exprs  map[string][]expression
-	Logger *zap.Logger
+	EncRaw    json.RawMessage `json:"encoder,omitempty" caddy:"namespace=caddy.logging.encoders inline_key=format"`
+	Exprs     map[string][]expression
+	Logger    *zap.Logger
+	Formatter string
 }
 
 func (ce ConditionalEncoder) Clone() zapcore.Encoder {
 	ret := ConditionalEncoder{
-		Encoder: ce.Encoder.Clone(),
-		Exprs:   ce.Exprs,
+		Encoder:   ce.Encoder.Clone(),
+		Exprs:     ce.Exprs,
+		Logger:    ce.Logger,
+		Formatter: ce.Formatter,
 	}
 	return ret
 }
 
 func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
-	// TODO > always use a JSON encoder to obtain the buffer
+	// Clone the original encoder to be sure we don't mess up it
+	enc := ce.Encoder.Clone()
+	if ce.Formatter != "json" {
+		// todo > grab keys (eg. "msg") from the EncoderConfig
+		// todo > set values according to line_ending, time_format, level_format
+		// todo > duration_format too?
+		enc.AddString("level", e.Level.String())
+		enc.AddTime("ts", e.Time)
+		enc.AddString("logger", e.LoggerName)
+		enc.AddString("msg", e.Message)
+		// todo > caller, stack
+	}
 
 	// Store the logging encoder's buffer
-	buf, err := ce.Encoder.EncodeEntry(e, fields)
+	buf, err := enc.EncodeEntry(e, fields)
 	if err != nil {
 		return buf, err
+	}
+	data := buf.Bytes()
+
+	// Strip non JSON-like prefix from the data buffer when it comes from a non JSON encoder
+	if pos := bytes.Index(data, []byte(`{"`)); ce.Formatter != "json" && pos != -1 {
+		data = data[pos:]
 	}
 
 	results := make(map[string][]bool)
 	for key, expressions := range ce.Exprs {
 		// Look for the field in the log entry
 		path := strings.Split(key, ">")
-		val, typ, _, err := jsonparser.Get(buf.Bytes(), path...)
+		val, typ, _, err := jsonparser.Get(data, path...)
 		if err != nil {
 			// Field not found, ignore the current expression
 			// todo > warn?
@@ -67,7 +88,7 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 			// Switch on the actual type of the value
 			switch typ {
 			case jsonparser.NotExist:
-				// todo > unreachable code because of the upper check on error, but warn anyway?
+				// unreachable code because of the check on error above
 			case jsonparser.Number, jsonparser.String:
 				results[key] = append(results[key], e.Evaluate(val))
 			default:
@@ -84,7 +105,8 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 	}
 
 	if acc || len(results) == 0 {
-		return buf, err
+		// Using the original encoder for output
+		return ce.Encoder.EncodeEntry(e, fields)
 	}
 	return nil, nil
 }
@@ -104,7 +126,7 @@ func (ConditionalEncoder) CaddyModule() caddy.ModuleInfo {
 // UnmarshalCaddyfile sets up the module form Caddyfile tokens.
 //
 // Syntax:
-// condition {
+// if {
 //     <field> <operator> <value>
 // }
 func (ce *ConditionalEncoder) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
@@ -163,6 +185,7 @@ func (ce *ConditionalEncoder) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			return d.Errf("module %s (%T) is not a zapcore.Encoder", moduleID, mod)
 		}
 		ce.EncRaw = caddyconfig.JSONModuleObject(enc, "format", moduleName, nil)
+		ce.Formatter = moduleName
 	}
 
 	return nil
@@ -173,7 +196,7 @@ func (ce *ConditionalEncoder) Provision(ctx caddy.Context) error {
 	ce.Logger = ctx.Logger(ce)
 
 	if ce.EncRaw == nil {
-		ce.Encoder = newDefaultProductionLogEncoder(true)
+		ce.Encoder, ce.Formatter = newDefaultProductionLogEncoder(true)
 
 		ctx.Logger(ce).Warn("fallback to a default production logging encoder")
 		return nil
@@ -188,7 +211,7 @@ func (ce *ConditionalEncoder) Provision(ctx caddy.Context) error {
 	return nil
 }
 
-func newDefaultProductionLogEncoder(colorize bool) zapcore.Encoder {
+func newDefaultProductionLogEncoder(colorize bool) (zapcore.Encoder, string) {
 	encCfg := zap.NewProductionEncoderConfig()
 	if term.IsTerminal(int(os.Stdout.Fd())) {
 		// if interactive terminal, make output more human-readable by default
@@ -198,9 +221,9 @@ func newDefaultProductionLogEncoder(colorize bool) zapcore.Encoder {
 		if colorize {
 			encCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
 		}
-		return zapcore.NewConsoleEncoder(encCfg)
+		return zapcore.NewConsoleEncoder(encCfg), "console"
 	}
-	return zapcore.NewJSONEncoder(encCfg)
+	return zapcore.NewJSONEncoder(encCfg), "json"
 }
 
 // Interface guards
