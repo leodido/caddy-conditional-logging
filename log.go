@@ -12,6 +12,7 @@ import (
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"github.com/caddyserver/caddy/v2/modules/logging"
 	"go.uber.org/zap"
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
@@ -28,7 +29,8 @@ func init() {
 }
 
 type ConditionalEncoder struct {
-	zapcore.Encoder `json:"-"`
+	zapcore.Encoder       `json:"-"`
+	zapcore.EncoderConfig `json:"-"`
 
 	EncRaw    json.RawMessage `json:"encoder,omitempty" caddy:"namespace=caddy.logging.encoders inline_key=format"`
 	Exprs     map[string][]expression
@@ -38,10 +40,11 @@ type ConditionalEncoder struct {
 
 func (ce ConditionalEncoder) Clone() zapcore.Encoder {
 	ret := ConditionalEncoder{
-		Encoder:   ce.Encoder.Clone(),
-		Exprs:     ce.Exprs,
-		Logger:    ce.Logger,
-		Formatter: ce.Formatter,
+		Encoder:       ce.Encoder.Clone(),
+		EncoderConfig: ce.EncoderConfig,
+		Exprs:         ce.Exprs,
+		Logger:        ce.Logger,
+		Formatter:     ce.Formatter,
 	}
 	return ret
 }
@@ -53,10 +56,10 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 		// todo > grab keys (eg. "msg") from the EncoderConfig
 		// todo > set values according to line_ending, time_format, level_format
 		// todo > duration_format too?
-		enc.AddString("level", e.Level.String())
-		enc.AddTime("ts", e.Time)
-		enc.AddString("logger", e.LoggerName)
-		enc.AddString("msg", e.Message)
+		enc.AddString(ce.LevelKey, e.Level.String())
+		enc.AddTime(ce.TimeKey, e.Time)
+		enc.AddString(ce.NameKey, e.LoggerName)
+		enc.AddString(ce.MessageKey, e.Message)
 		// todo > caller, stack
 	}
 
@@ -205,6 +208,14 @@ func (ce *ConditionalEncoder) Provision(ctx caddy.Context) error {
 	val, err := ctx.LoadModule(ce, "EncRaw")
 	if err != nil {
 		return fmt.Errorf("loading fallback encoder module: %v", err)
+	}
+	switch v := val.(type) {
+	case *logging.JSONEncoder:
+		ce.EncoderConfig = v.LogEncoderConfig.ZapcoreEncoderConfig()
+	case *logging.ConsoleEncoder:
+		ce.EncoderConfig = v.LogEncoderConfig.ZapcoreEncoderConfig()
+	default:
+		return fmt.Errorf("unsupported encoder type %T", v)
 	}
 	ce.Encoder = val.(zapcore.Encoder)
 
