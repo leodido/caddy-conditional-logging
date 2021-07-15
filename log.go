@@ -145,34 +145,36 @@ func (ce *ConditionalEncoder) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 		// Parse block
 		for d.NextBlock(0) {
 			field := d.Val()
-			if !d.NextArg() {
+
+			args := d.RemainingArgs()
+			if len(args) == 2 {
+				operand := args[0]
+				value := args[1]
+
 				if nconditions == 0 {
-					return d.ArgErr()
-				} else {
-					d.Prev()
-					break
+					ce.Exprs = make(map[string][]expression)
 				}
+				exp, err := makeExpression(operand, field, value)
+				if err != nil {
+					return d.Err(err.Error())
+				}
+				if _, ok := ce.Exprs[field]; !ok {
+					ce.Exprs[field] = make([]expression, 0)
+				}
+				ce.Exprs[field] = append(ce.Exprs[field], exp)
+
+				nconditions++
+				continue
 			}
 
-			operand := d.Val()
-			if !d.NextArg() {
-				return d.ArgErr()
+			if len(args) == 0 {
+				d.Prev()
+				break
 			}
 
-			value := d.Val()
-			if nconditions == 0 {
-				ce.Exprs = make(map[string][]expression)
+			if len(args) > 0 {
+				return d.Errf("expecting <field> <operator> <value> tokens for %s (%T)", moduleID, ce)
 			}
-			exp, err := makeExpression(operand, field, value)
-			if err != nil {
-				return d.Err(err.Error())
-			}
-			if _, ok := ce.Exprs[field]; !ok {
-				ce.Exprs[field] = make([]expression, 0)
-			}
-			ce.Exprs[field] = append(ce.Exprs[field], exp)
-
-			nconditions++
 		}
 	}
 
