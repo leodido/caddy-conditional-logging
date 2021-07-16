@@ -52,16 +52,18 @@ func (ce ConditionalEncoder) Clone() zapcore.Encoder {
 func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
 	// Clone the original encoder to be sure we don't mess up it
 	enc := ce.Encoder.Clone()
+
 	if ce.Formatter == "console" {
-		// todo > grab keys (eg. "msg") from the EncoderConfig
-		// todo > set values according to line_ending, time_format, level_format
-		// todo > duration_format too?
+		// Add the zap entries to the console encoder
+		// todo > Set the values according to line_ending, time_format, level_format
+		// todo > Investigate duration_format too?
 		enc.AddString(ce.LevelKey, e.Level.String())
 		enc.AddTime(ce.TimeKey, e.Time)
 		enc.AddString(ce.NameKey, e.LoggerName)
 		enc.AddString(ce.MessageKey, e.Message)
 		// todo > caller, stack
 	} else if ce.Formatter == "jsonselect" {
+		// Use the JSON encoder that JSONSelect wraps
 		jsonEncoder, ok := ce.Encoder.(jsonselect.JSONSelectEncoder)
 		if !ok {
 			return nil, fmt.Errorf("unexpected encoder type %T", ce.Encoder)
@@ -88,7 +90,7 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 		val, typ, _, err := jsonparser.Get(data, path...)
 		if err != nil {
 			// Field not found, ignore the current expression
-			// todo > warn?
+			// todo > Warn?
 			continue
 		}
 
@@ -101,7 +103,7 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 			case jsonparser.Number, jsonparser.String:
 				results[key] = append(results[key], e.Evaluate(val))
 			default:
-				// todo > warn that we don't support this type
+				// todo > Warn that we don't support this type?
 			}
 		}
 	}
