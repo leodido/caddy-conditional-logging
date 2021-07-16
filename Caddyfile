@@ -5,6 +5,12 @@ file_server browse
 log {
   output stdout
   format if {
-      status sw 4
-  } json
+      status sw 2
+  } jsonselect "{severity} {timestamp} {logName}" {
+    level_key "severity"
+    level_format "upper"
+    time_key "timestamp"
+    time_format "rfc3339"
+    name_key "logName"
+  }
 }

@@ -1,8 +1,6 @@
 package conditionallog
 
 import (
-	"fmt"
-
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"go.uber.org/zap/zapcore"
@@ -98,7 +96,6 @@ func (ce *ConditionalEncoder) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	case "json":
 		fallthrough
 	case "jsonselect":
-		fmt.Println("FALL")
 		fallthrough
 	case "console":
 		d.NextBlock(0)
