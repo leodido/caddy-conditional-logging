@@ -39,7 +39,6 @@ func (ce *ConditionalEncoder) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			field := d.Val()
 			ntokens++
 			args := d.RemainingArgs()
-			fmt.Println(d.Token(), args)
 			if len(args) == 2 {
 				ntokens += 2
 				operand := args[0]
@@ -117,7 +116,6 @@ func (ce *ConditionalEncoder) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	if nextDispenser.Next() {
 		moduleName := nextDispenser.Val()
 		moduleID := "caddy.logging.encoders." + moduleName
-		fmt.Println(moduleID)
 		mod, err := caddyfile.UnmarshalModule(nextDispenser, moduleID)
 		if err != nil {
 			return err
