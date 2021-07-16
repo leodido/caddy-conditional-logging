@@ -13,6 +13,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/logging"
+	jsonselect "github.com/leodido/caddy-jsonselect-encoder"
 	"go.uber.org/zap"
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
@@ -52,7 +53,7 @@ func (ce ConditionalEncoder) Clone() zapcore.Encoder {
 func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
 	// Clone the original encoder to be sure we don't mess up it
 	enc := ce.Encoder.Clone()
-	if ce.Formatter != "json" {
+	if ce.Formatter == "console" {
 		// todo > grab keys (eg. "msg") from the EncoderConfig
 		// todo > set values according to line_ending, time_format, level_format
 		// todo > duration_format too?
@@ -61,6 +62,12 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 		enc.AddString(ce.NameKey, e.LoggerName)
 		enc.AddString(ce.MessageKey, e.Message)
 		// todo > caller, stack
+	} else if ce.Formatter == "jsonselect" {
+		jsonEncoder, ok := ce.Encoder.(jsonselect.JSONSelectEncoder)
+		if !ok {
+			return nil, fmt.Errorf("unexpected encoder type %T", ce.Encoder)
+		}
+		enc = jsonEncoder.Encoder
 	}
 
 	// Store the logging encoder's buffer
@@ -71,7 +78,7 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 	data := buf.Bytes()
 
 	// Strip non JSON-like prefix from the data buffer when it comes from a non JSON encoder
-	if pos := bytes.Index(data, []byte(`{"`)); ce.Formatter != "json" && pos != -1 {
+	if pos := bytes.Index(data, []byte(`{"`)); ce.Formatter == "console" && pos != -1 {
 		data = data[pos:]
 	}
 
@@ -108,7 +115,7 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 	}
 
 	if acc || len(results) == 0 {
-		// Using the original encoder for output
+		// Using the original (wrapped) encoder for output
 		return ce.Encoder.EncodeEntry(e, fields)
 	}
 	return nil, nil
@@ -167,7 +174,10 @@ func (ce *ConditionalEncoder) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				continue
 			}
 
-			if len(args) == 0 {
+			if field == "jsonselect" {
+				for i := 0; i < len(args); i++ {
+					d.Prev()
+				}
 				d.Prev()
 				break
 			}
@@ -215,6 +225,8 @@ func (ce *ConditionalEncoder) Provision(ctx caddy.Context) error {
 	case *logging.JSONEncoder:
 		ce.EncoderConfig = v.LogEncoderConfig.ZapcoreEncoderConfig()
 	case *logging.ConsoleEncoder:
+		ce.EncoderConfig = v.LogEncoderConfig.ZapcoreEncoderConfig()
+	case *jsonselect.JSONSelectEncoder:
 		ce.EncoderConfig = v.LogEncoderConfig.ZapcoreEncoderConfig()
 	default:
 		return fmt.Errorf("unsupported encoder type %T", v)
