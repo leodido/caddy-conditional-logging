@@ -10,7 +10,6 @@ import (
 
 	"github.com/buger/jsonparser"
 	"github.com/caddyserver/caddy/v2"
-	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/logging"
 	jsonselect "github.com/leodido/caddy-jsonselect-encoder"
@@ -128,82 +127,6 @@ func (ConditionalEncoder) CaddyModule() caddy.ModuleInfo {
 			return new(ConditionalEncoder)
 		},
 	}
-}
-
-// todo >
-// func (ce *ConditionalEncoder) Validate() error {}
-
-// UnmarshalCaddyfile sets up the module form Caddyfile tokens.
-//
-// Syntax:
-// if {
-//     <field> <operator> <value>
-// }
-func (ce *ConditionalEncoder) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
-	if d.Next() {
-		if d.Val() != moduleName {
-			return d.Errf("expecting %s (%T) subdirective", moduleID, ce)
-		}
-		// Expecting a block opening
-		if d.NextArg() {
-			return d.ArgErr()
-		}
-		nconditions := 0
-		// Parse block
-		for d.NextBlock(0) {
-			field := d.Val()
-
-			args := d.RemainingArgs()
-			if len(args) == 2 {
-				operand := args[0]
-				value := args[1]
-
-				if nconditions == 0 {
-					ce.Exprs = make(map[string][]expression)
-				}
-				exp, err := makeExpression(operand, field, value)
-				if err != nil {
-					return d.Err(err.Error())
-				}
-				if _, ok := ce.Exprs[field]; !ok {
-					ce.Exprs[field] = make([]expression, 0)
-				}
-				ce.Exprs[field] = append(ce.Exprs[field], exp)
-
-				nconditions++
-				continue
-			}
-
-			if field == "jsonselect" {
-				for i := 0; i < len(args); i++ {
-					d.Prev()
-				}
-				d.Prev()
-				break
-			}
-
-			if len(args) > 0 {
-				return d.Errf("expecting <field> <operator> <value> tokens for %s (%T)", moduleID, ce)
-			}
-		}
-	}
-
-	if d.Next() {
-		moduleName := d.Val()
-		moduleID := "caddy.logging.encoders." + moduleName
-		mod, err := caddyfile.UnmarshalModule(d, moduleID)
-		if err != nil {
-			return err
-		}
-		enc, ok := mod.(zapcore.Encoder)
-		if !ok {
-			return d.Errf("module %s (%T) is not a zapcore.Encoder", moduleID, mod)
-		}
-		ce.EncRaw = caddyconfig.JSONModuleObject(enc, "format", moduleName, nil)
-		ce.Formatter = moduleName
-	}
-
-	return nil
 }
 
 func (ce *ConditionalEncoder) Provision(ctx caddy.Context) error {
