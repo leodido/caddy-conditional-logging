@@ -125,13 +125,10 @@ Change the level and time format, and also change the key names for the resultin
 ```caddyfile
 log {
   format if {
-      status sw 400
-  } jsonselect "{severity} {timestamp} {logName}" {
-    level_key "severity"
+      status sw 4
+  } jsonselect "{severity:level} {timestamp:ts} {logName:logger} {httpRequest>requestMethod:request>method} {httpRequest>protocol:request>proto} {httpRequest>status:status} {httpRequest>responseSize:size} {httpRequest>userAgent:request>headers>User-Agent>[0]}" {
     level_format "upper"
-    time_key "timestamp"
-    time_format "rfc3339"
-    name_key "logName"
+    time_format "rfc3339_nano"
   }
 }
 ```
@@ -139,7 +136,7 @@ log {
 This outputs:
 
 ```json
-{"severity":"ERROR","timestamp":"2021-07-16T12:55:10Z","logName":"http.log.access.log0"}
+{"severity":"INFO","timestamp":"2021-07-19T15:44:44.077586Z","logName":"http.log.access.log0","httpRequest":{"requestMethod":"GET","protocol":"HTTP/2.0","status":200,"responseSize":11348,"userAgent":"Mozilla/5.0 ..."}}
 ```
 
 ## Try it out
