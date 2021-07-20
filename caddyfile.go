@@ -17,7 +17,6 @@ package conditionallog
 import (
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
-	"github.com/leodido/caddy-conditional-logging/lang"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -44,11 +43,7 @@ func (ce *ConditionalEncoder) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			return d.Errf("%s (%T) requires an expression", moduleID, ce)
 		}
 
-		eval, err := lang.Compile(expression)
-		if err != nil {
-			return d.Err(err.Error())
-		}
-		ce.Eval = eval
+		ce.Expr = expression
 	}
 
 	if !d.Next() {
