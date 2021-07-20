@@ -4,13 +4,8 @@ file_server browse
 
 log {
   output stdout
-  format if {
-      status sw 2
-  } jsonselect "{severity} {timestamp} {logName}" {
-    level_key "severity"
+  format if "status != 200 && status != 304" jsonselect "{severity:level} {timestamp:ts} {logName:logger} {httpRequest>requestMethod:request>method} {httpRequest>protocol:request>proto} {httpRequest>status:status} {httpRequest>responseSize:size} {httpRequest>userAgent:request>headers>User-Agent>[0]}" {
     level_format "upper"
-    time_key "timestamp"
-    time_format "rfc3339"
-    name_key "logName"
+    time_format "rfc3339_nano"
   }
 }
