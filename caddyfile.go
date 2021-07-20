@@ -15,12 +15,8 @@
 package conditionallog
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/leodido/caddy-conditional-logging/lang"
 	"go.uber.org/zap/zapcore"
 )
@@ -29,7 +25,7 @@ import (
 //
 // Syntax:
 // if {
-//     <expression>
+//     "<expression>"
 // } [<encoder>]
 //
 // The <expression> must be on a single line.
@@ -43,36 +39,20 @@ func (ce *ConditionalEncoder) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 		if d.Val() != moduleName {
 			return d.Errf("expecting %s (%T) subdirective", moduleID, ce)
 		}
-		// Expecting a block opening
-		if d.NextArg() {
-			return d.ArgErr()
+		var expression string
+		if !d.Args(&expression) {
+			return d.Errf("%s (%T) requires an expression", moduleID, ce)
 		}
 
-		gotExpression := false
-		for d.NextBlock(0) {
-			if gotExpression {
-				break
-			}
-			expressionDispenser := d.NewFromNextSegment()
-			if expressionDispenser == nil {
-				return d.Errf("expecting expression segment for %s (%T)", moduleID, ce)
-			}
-
-			spew.Dump(expressionDispenser)
-
-			expr := expressionDispenser.RemainingArgs()
-			fmt.Println("expr:", expr)
-			eval, err := lang.Compile(strings.Join(expr, " "))
-			if err != nil {
-				return d.Err(err.Error())
-			}
-			ce.Eval = eval
-			gotExpression = true
+		eval, err := lang.Compile(expression)
+		if err != nil {
+			return d.Err(err.Error())
 		}
+		ce.Eval = eval
+	}
 
-		if !gotExpression {
-			return d.Errf("expecting expression for %s (%T)", moduleID, ce)
-		}
+	if !d.Next() {
+		return nil
 	}
 
 	// Delegate the parsing of the encoder to the encoder itself
