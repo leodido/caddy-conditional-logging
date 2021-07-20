@@ -3,6 +3,7 @@ module github.com/leodido/caddy-conditional-logging
 go 1.16
 
 require (
+	github.com/PaesslerAG/gval v1.1.1
 	github.com/buger/jsonparser v1.1.2-0.20210620171241-dc92d6932a12
 	github.com/caddyserver/caddy/v2 v2.4.3
 	github.com/caddyserver/certmagic v0.14.1 // indirect
