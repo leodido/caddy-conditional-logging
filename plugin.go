@@ -22,10 +22,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PaesslerAG/gval"
 	"github.com/buger/jsonparser"
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/modules/logging"
+	"github.com/leodido/caddy-conditional-logging/lang"
 	jsonselect "github.com/leodido/caddy-jsonselect-encoder"
 	"go.uber.org/zap"
 	"go.uber.org/zap/buffer"
@@ -47,8 +49,9 @@ type ConditionalEncoder struct {
 	zapcore.EncoderConfig `json:"-"`
 
 	EncRaw    json.RawMessage `json:"encoder,omitempty" caddy:"namespace=caddy.logging.encoders inline_key=format"`
-	Exprs     map[string][]expression
-	Logger    *zap.Logger
+	Eval      gval.Evaluable  `json:"-"`
+	Expr      string
+	Logger    func(caddy.Module) *zap.Logger `json:"-"`
 	Formatter string
 }
 
@@ -56,7 +59,7 @@ func (ce ConditionalEncoder) Clone() zapcore.Encoder {
 	ret := ConditionalEncoder{
 		Encoder:       ce.Encoder.Clone(),
 		EncoderConfig: ce.EncoderConfig,
-		Exprs:         ce.Exprs,
+		Eval:          ce.Eval,
 		Logger:        ce.Logger,
 		Formatter:     ce.Formatter,
 	}
@@ -97,43 +100,41 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 		data = data[pos:]
 	}
 
-	results := make(map[string][]bool)
-	for key, expressions := range ce.Exprs {
-		// Look for the field in the log entry
+	values := make(map[string]interface{})
+	for _, key := range lang.Fields {
 		path := strings.Split(key, ">")
 		val, typ, _, err := jsonparser.Get(data, path...)
 		if err != nil {
 			// Field not found, ignore the current expression
-			// todo > Warn?
+			ce.Logger(&ce).Warn("field not found: please fix or remove it", zap.String("field", key))
 			continue
 		}
-
-		// Evaluate the expressions regarding the current field
-		for _, e := range expressions {
-			// Switch on the actual type of the value
-			switch typ {
-			case jsonparser.NotExist:
-				// unreachable code because of the check on error above
-			case jsonparser.Number, jsonparser.String:
-				results[key] = append(results[key], e.Evaluate(val))
-			default:
-				// todo > Warn that we don't support this type?
-			}
+		switch typ {
+		case jsonparser.NotExist:
+			// todo > try to reproduce
+		case jsonparser.Number, jsonparser.String, jsonparser.Boolean:
+			values[key] = string(val)
+		default:
+			// Advice to remove it from the expression
+			ce.Logger(&ce).Warn("field has an unsupported value type: please fix or remove it", zap.String("field", key), zap.String("type", typ.String()))
 		}
 	}
 
-	acc := false
-	for _, res := range results {
-		for _, r := range res {
-			acc = acc || r
-		}
+	res, err := lang.Execute(ce.Eval, values)
+	emit, ok := res.(bool)
+	if !ok {
+		ce.Logger(&ce).Error("expecting a boolean expression", zap.String("return", fmt.Sprintf("%T", res)))
+		goto output
 	}
 
-	if acc || len(results) == 0 {
+	if emit {
 		// Using the original (wrapped) encoder for output
 		return ce.Encoder.EncodeEntry(e, fields)
 	}
-	return nil, nil
+
+output:
+	buf.Reset()
+	return buf, nil
 }
 
 func (ConditionalEncoder) CaddyModule() caddy.ModuleInfo {
@@ -147,7 +148,12 @@ func (ConditionalEncoder) CaddyModule() caddy.ModuleInfo {
 
 func (ce *ConditionalEncoder) Provision(ctx caddy.Context) error {
 	// Store the logger
-	ce.Logger = ctx.Logger(ce)
+	ce.Logger = ctx.Logger
+
+	if len(ce.Expr) == 0 {
+		ctx.Logger(ce).Error("must provide an expression")
+		return nil
+	}
 
 	if ce.EncRaw == nil {
 		ce.Encoder, ce.Formatter = newDefaultProductionLogEncoder(true)
@@ -171,6 +177,12 @@ func (ce *ConditionalEncoder) Provision(ctx caddy.Context) error {
 		return fmt.Errorf("unsupported encoder type %T", v)
 	}
 	ce.Encoder = val.(zapcore.Encoder)
+
+	eval, err := lang.Compile(ce.Expr)
+	if err != nil {
+		return fmt.Errorf(err.Error())
+	}
+	ce.Eval = eval
 
 	return nil
 }
