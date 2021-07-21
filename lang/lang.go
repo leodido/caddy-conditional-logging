@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 	"text/scanner"
 	"unicode"
@@ -12,6 +13,7 @@ import (
 )
 
 var Lang = gval.NewLanguage(
+	// Logic
 	gval.InfixShortCircuit("&&", func(lhs interface{}) (interface{}, bool) { return false, lhs == false }),
 	gval.InfixShortCircuit("||", func(lhs interface{}) (interface{}, bool) { return true, lhs == true }),
 
@@ -20,6 +22,15 @@ var Lang = gval.NewLanguage(
 
 	gval.InfixBoolOperator("==", func(lhs, rhs bool) (interface{}, error) { return lhs == rhs, nil }),
 	gval.InfixBoolOperator("!=", func(lhs, rhs bool) (interface{}, error) { return lhs != rhs, nil }),
+
+	// Arithmetic
+
+	gval.InfixNumberOperator("==", func(lhs, rhs float64) (interface{}, error) { return lhs == rhs, nil }),
+	gval.InfixNumberOperator("!=", func(lhs, rhs float64) (interface{}, error) { return lhs != rhs, nil }),
+
+	// Text
+
+	gval.InfixEvalOperator("~~", regEx),
 
 	// Base
 
@@ -33,9 +44,6 @@ var Lang = gval.NewLanguage(
 	gval.Constant("true", true),
 	gval.Constant("false", false),
 
-	gval.InfixNumberOperator("==", func(lhs, rhs float64) (interface{}, error) { return lhs == rhs, nil }),
-	gval.InfixNumberOperator("!=", func(lhs, rhs float64) (interface{}, error) { return lhs != rhs, nil }),
-
 	gval.Parentheses(),
 
 	gval.Precedence("||", 20),
@@ -43,6 +51,7 @@ var Lang = gval.NewLanguage(
 
 	gval.Precedence("==", 40),
 	gval.Precedence("!=", 40),
+	gval.Precedence("~~", 40),
 
 	gval.PrefixMetaPrefix(scanner.Ident, parseIdent),
 )
@@ -71,6 +80,38 @@ func parseNumber(c context.Context, p *gval.Parser) (gval.Evaluable, error) {
 		return nil, err
 	}
 	return p.Const(n), nil
+}
+
+func regEx(a, b gval.Evaluable) (gval.Evaluable, error) {
+	if !b.IsConst() {
+		return func(c context.Context, o interface{}) (interface{}, error) {
+			a, err := a.EvalString(c, o)
+			if err != nil {
+				return nil, err
+			}
+			b, err := b.EvalString(c, o)
+			if err != nil {
+				return nil, err
+			}
+			matched, err := regexp.MatchString(b, a)
+			return matched, err
+		}, nil
+	}
+	s, err := b.EvalString(context.TODO(), nil)
+	if err != nil {
+		return nil, err
+	}
+	regex, err := regexp.Compile(s)
+	if err != nil {
+		return nil, err
+	}
+	return func(c context.Context, v interface{}) (interface{}, error) {
+		s, err := a.EvalString(c, v)
+		if err != nil {
+			return nil, err
+		}
+		return regex.MatchString(s), nil
+	}, nil
 }
 
 func parseIdent(c context.Context, p *gval.Parser) (call string, alternative func() (gval.Evaluable, error), err error) {

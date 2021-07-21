@@ -15,6 +15,7 @@ An expression is - usually - in the form of `<lhs> <operator> <rhs>`.
 
 - `==`: equals to
 - `!=`: not equals to
+- `~~`: matches (regex)
 
 ## Fields
 
@@ -51,4 +52,4 @@ In order of evaluation:
 1. `()`
 2. `||`
 3. `&&`
-4. `==`, `!=`
+4. `==`, `!=`, `~~`
