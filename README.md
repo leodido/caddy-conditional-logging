@@ -13,13 +13,12 @@ The **module name** is `if`.
 Its syntax is:
 
 ```caddyfile
-if {
-    <expression>
-    ...
-} [<encoder>]
+if "<expression>" [<encoder>]
 ```
 
 This Caddy module logs as the `<encoder>` demands if at least one of the expressions is met.
+
+The `<expression>` must be enclosed in double quotes.
 
 The supported encoders are:
 
@@ -31,23 +30,11 @@ When no `<encoder>` is specified, a default encoder (`console` or `json`) is aut
 
 ### Expressions
 
-Expressions have the following syntax: `<field> <operator> <value>`.
+The [language](./lang) supports simple boolean expressions.
 
-The supported operators are:
+An expression is - usually - in the form of `<lhs> <operator> <rhs>`. But you can compose and nest them!
 
-- `eq`: equals to
-- `ne`: not equals to
-- `sw`: starts with
-
-The **field syntax** is as per [buger/jsonparser](https://github.com/buger/jsonparser).
-
-So, you can assert conditions also on nested fields!
-
-Let's say you want to log if the user agent starts starts with some value...
-
-You'd need to traverse the request object, its headers child (another object), and its "User-Agent" child (array).
-
-Sounds difficult. But, it isn't! Express this field as: `request>headers>User-Agent>[0]`.
+Take a look at the [language documentation](./lang/README.md) for more information.
 
 ## Caddyfile
 
@@ -56,9 +43,7 @@ Log JSON to stdout if the status starts with a 4 (eg., 404).
 ```caddyfile
 log {
   output stdout
-  format if {
-      status sw 4
-  } json
+  format if "status ~~ `^4`" json
 }
 ```
 
@@ -67,24 +52,16 @@ Log to stdout in console format if the request's method is "GET".
 ```caddyfile
 log {
   output stdout
-  format if {
-      request>method eq GET
-  } console
+  format if "request>method == `GET`" console
 }
 ```
 
 Log JSON to stdout if at least one of the conditions match.
 
-Notice this means that condistions are in OR.
-
 ```caddyfile
 log {
   output stdout
-  format if {
-      status sw 4
-      status sw 5
-      request>uri eq "/"
-  } json
+  format if "status ~~ `^4` || status ~~ `^5` || request>uri == `/`" json
 }
 ```
 
@@ -93,9 +70,7 @@ Log JSON to stdout if the visit is from a Mozilla browser.
 ```caddyfile
 log {
   output stdout
-  format if {
-      request>headers>User-Agent>[0] sw Mozilla
-  } json
+  format if "request>headers>User-Agent>[0] ~~ `Gecko`" json
 }
 ```
 
@@ -104,9 +79,7 @@ for responses with HTTP status equal to 200.
 
 ```caddyfile
 log {
-  format if {
-      status eq 200
-  } jsonselect "{ts} {logger} {duration}"
+  format if "status == 200" jsonselect "{ts} {logger} {duration}"
 }
 ```
 
@@ -116,7 +89,7 @@ This outputs a nice JSON like the following one:
 {"ts":1626440165.351731,"logger":"http.log.access.log0","duration":0.000198292}
 ```
 
-Do you wanna log Stackdriver entries only for 4** response status codes?
+Do you wanna log [Stackdriver](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry) entries only for 4** response status codes?
 
 Let's do it!
 
@@ -124,9 +97,7 @@ Change the level and time format, and also change the key names for the resultin
 
 ```caddyfile
 log {
-  format if {
-      status sw 4
-  } jsonselect "{severity:level} {timestamp:ts} {logName:logger} {httpRequest>requestMethod:request>method} {httpRequest>protocol:request>proto} {httpRequest>status:status} {httpRequest>responseSize:size} {httpRequest>userAgent:request>headers>User-Agent>[0]}" {
+  format if "status ~~ `^4`" jsonselect "{severity:level} {timestamp:ts} {logName:logger} {httpRequest>requestMethod:request>method} {httpRequest>protocol:request>proto} {httpRequest>status:status} {httpRequest>responseSize:size} {httpRequest>userAgent:request>headers>User-Agent>[0]} {httpRequest>requestUrl:request>uri}" {
     level_format "upper"
     time_format "rfc3339_nano"
   }
@@ -136,7 +107,7 @@ log {
 This outputs:
 
 ```json
-{"severity":"INFO","timestamp":"2021-07-19T15:44:44.077586Z","logName":"http.log.access.log0","httpRequest":{"requestMethod":"GET","protocol":"HTTP/2.0","status":200,"responseSize":11348,"userAgent":"Mozilla/5.0 ..."}}
+{"severity":"INFO","timestamp":"2021-07-19T15:44:44.077586Z","logName":"http.log.access.log0","httpRequest":{"requestMethod":"GET","protocol":"HTTP/2.0","status":200,"responseSize":11348,"userAgent":"Mozilla/5.0 ...","requestUrl":"/leo"}}
 ```
 
 ## Try it out

@@ -100,6 +100,7 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 		data = data[pos:]
 	}
 
+	// Extract values
 	values := make(map[string]interface{})
 	for _, key := range lang.Fields {
 		path := strings.Split(key, ">")
@@ -120,11 +121,12 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 		}
 	}
 
+	// Evaluate the expression against values
 	res, err := lang.Execute(ce.Eval, values)
 	emit, ok := res.(bool)
 	if !ok {
 		ce.Logger(&ce).Error("expecting a boolean expression", zap.String("return", fmt.Sprintf("%T", res)))
-		goto output
+		goto emitNothing
 	}
 
 	if emit {
@@ -132,7 +134,7 @@ func (ce ConditionalEncoder) EncodeEntry(e zapcore.Entry, fields []zapcore.Field
 		return ce.Encoder.EncodeEntry(e, fields)
 	}
 
-output:
+emitNothing:
 	buf.Reset()
 	return buf, nil
 }
